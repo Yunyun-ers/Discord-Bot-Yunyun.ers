@@ -1,6 +1,8 @@
 # Discord Bot
-
-Bot สำหรับใช้งานใน Server VoiceChat ทั่วไป
+<p align = "center">
+<img src="assets/Discord_Bot.png" width="300">
+Discord Bot สำหรับใช้งานใน Server VoiceChat ทั่วไป
+</p>
 
 # Function
 
