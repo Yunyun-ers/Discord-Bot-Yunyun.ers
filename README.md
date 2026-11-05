@@ -1,8 +1,15 @@
-# Discord bot
+# Discord Bot
 
-A fresh discord.py project. No old code, features, or credentials are included.
+Bot สำหรับใช้งานใน Server VoiceChat ทั่วไป
 
-## Setup (PowerShell)
+# Function
+
+- Radio (API)
+    - COOLfahrenheit (Thai Radio Station)
+    - Listen.moe (J,K-pop Radio Station)
+
+
+## Setup
 
 ```powershell
 python -m venv .venv
@@ -10,13 +17,13 @@ python -m venv .venv
 Copy-Item .env.example .env
 ```
 
-Set DISCORD_BOT_TOKEN in .env, then run:
+ตั้งคต่า `DISCORD_BOT_TOKEN` จาก DDP ลงใน .env และเริ่ม Run Bot :
 
 ```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-Add feature extensions under cogs/. See cogs/README.md for the template.
+เพิ่ม Function, Feature ของตนเองได้ที่ cogs/. 
 
 ## Requirements
 ลง Plugin `ffmpeg.exe` ที่ Folder เดียวกันกับ main.py
