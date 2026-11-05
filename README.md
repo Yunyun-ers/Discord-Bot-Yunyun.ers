@@ -1,6 +1,5 @@
 # Discord Bot
-<p align = "center">
-<img src="assets/Discord_Bot.png" width="300">/n
+<p align = "center"><img src="assets/Discord_Bot.png" width="300"><br>
 Discord Bot สำหรับใช้งานใน Server VoiceChat ทั่วไป
 </p>
 
