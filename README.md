@@ -18,17 +18,9 @@ Set DISCORD_BOT_TOKEN in .env, then run:
 
 Add feature extensions under cogs/. See cogs/README.md for the template.
 
-## Radio dependencies
-
-The Python environment is local to this folder (`.venv`). Install voice support from this folder with:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install PyNaCl
-```
-
-You can place `ffmpeg.exe` directly beside `main.py`. Radio checks this local file first, so you do not need to add FFmpeg to the system PATH. Alternatively set `RADIO_FFMPEG_PATH` in `.env` to a local or absolute executable path.
-
+## Requirements
+ลง Plugin `ffmpeg.exe` ที่ Folder เดียวกันกับ main.py
 ## Bot Commands
 
-Setup :
+Setup Bot :
 ```/setup```
