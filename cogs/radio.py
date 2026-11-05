@@ -44,8 +44,6 @@ class RadioStationView(SetupView):
         self.start_button = StartRadioButton()
         self.start_button.disabled = self.station not in STATIONS
         self.add_item(self.start_button)
-        if voice_channel_id:
-            self.add_item(ChangeRoomButton())
         self.add_item(BackToFeaturesButton())
 
     def card(self):
@@ -69,18 +67,6 @@ class StartRadioButton(discord.ui.Button):
         panel.stop()
 
 
-class ChangeRoomButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Room", style=discord.ButtonStyle.secondary, row=1)
-
-    async def callback(self, interaction):
-        panel = self.view
-        view = RadioRoomView(panel.cog, panel.owner, panel.guild_id)
-        await interaction.response.edit_message(embed=view.card(), view=view)
-        view.message = panel.message
-        panel.stop()
-
-
 class BackToFeaturesButton(discord.ui.Button):
     def __init__(self):
         super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
@@ -89,42 +75,6 @@ class BackToFeaturesButton(discord.ui.Button):
         panel = self.view
         view = FeatureView(panel.cog.bot, panel.owner, panel.guild_id)
         await interaction.response.edit_message(content=None, embed=view.card(), view=view)
-        view.message = panel.message
-        panel.stop()
-
-
-class RadioRoomSelect(discord.ui.ChannelSelect):
-    def __init__(self):
-        super().__init__(placeholder="Select the voice channel…", channel_types=[discord.ChannelType.voice], row=0)
-
-    async def callback(self, interaction):
-        self.view.voice_channel_id = self.values[0].id
-        self.view.next_button.disabled = False
-        await interaction.response.edit_message(embed=self.view.card(), view=self.view)
-
-
-class RadioRoomView(SetupView):
-    def __init__(self, cog, owner, guild_id):
-        super().__init__(owner, guild_id)
-        self.cog = cog
-        self.voice_channel_id = None
-        self.add_item(RadioRoomSelect())
-        self.next_button = RadioRoomNextButton()
-        self.add_item(self.next_button)
-
-    def card(self):
-        return embed("Choose the voice channel where the bot should play radio, then click Next.", ("Voice channel", "This is saved separately for each server."))
-
-
-class RadioRoomNextButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Next", style=discord.ButtonStyle.primary, row=1, disabled=True)
-
-    async def callback(self, interaction):
-        panel = self.view
-        panel.cog.bot.settings.set(panel.guild_id, "radio.voice_channel_id", str(panel.voice_channel_id))
-        view = RadioStationView(panel.cog, panel.owner, panel.guild_id, panel.voice_channel_id)
-        await interaction.response.edit_message(embed=view.card(), view=view)
         view.message = panel.message
         panel.stop()
 
@@ -158,12 +108,29 @@ class RadioCog(commands.Cog):
         await self.bot.wait_until_ready()
 
     async def open_setup(self, interaction):
-        configured = self.bot.settings.get(interaction.guild_id, "radio.voice_channel_id")
-        if configured and self.bot.get_channel(int(configured)):
-            view = RadioStationView(self, interaction.user.id, interaction.guild_id, int(configured))
-        else:
-            view = RadioRoomView(self, interaction.user.id, interaction.guild_id)
+        voice_state = getattr(interaction.user, "voice", None)
+        channel = voice_state.channel if voice_state else None
+        if not isinstance(channel, discord.VoiceChannel):
+            message = "Join a voice channel first, then run /radio or select Radio from /setup."
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+            return
+        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id)
         await interaction.response.edit_message(embed=view.card(), view=view)
+        view.message = await interaction.original_response()
+
+    @discord.app_commands.command(name="radio", description="Open the radio panel for your current voice channel")
+    @discord.app_commands.guild_only()
+    async def radio_command(self, interaction: discord.Interaction):
+        voice_state = getattr(interaction.user, "voice", None)
+        channel = voice_state.channel if voice_state else None
+        if not isinstance(channel, discord.VoiceChannel):
+            await interaction.response.send_message("Join a voice channel first, then run /radio.", ephemeral=True)
+            return
+        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id)
+        await interaction.response.send_message(embed=view.card(), view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
     async def start_radio(self, interaction, voice_channel_id, station_key):
