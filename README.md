@@ -1,5 +1,8 @@
 # Discord Bot
-<p align = "center"><img src="assets/Discord_Bot.png" width="300"><br>
+<p align = "center">
+    <a href = "https://discord.com/oauth2/authorize?client_id=1367791789276401735&permissions=8&integration_type=0&scope=bot">
+        <img src="assets/Discord_Bot.png" width="300"><br>
+    </a>
 **Discord Bot** ー สำหรับใช้งานใน Server VoiceChat ทั่วไป<br>
 “　ありがとうー！　”
 </p>
