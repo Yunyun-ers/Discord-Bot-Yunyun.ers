@@ -13,10 +13,9 @@
     - COOLfahrenheit (Thai Radio Station)
     - Listen.moe (J,K-pop Radio Station)
 
-- Notification [Join , Leave]
-    All Flexibility to Customization
-        - Server Join Message sent to chat
-        - Server Leave Message sent to chat
+- Notification [Join , Leave] ー　All Flexibility to Customization
+    - Server Join Message sent to chat
+    - Server Leave Message sent to chat
 
 ## Setup
 
