@@ -16,6 +16,13 @@
 - Notification [Join , Leave] ー　All Flexibility to Customization
     - Server Join Message sent to chat
     - Server Leave Message sent to chat
+    <details>
+    <summary>Preview Image</summary>
+
+    <p align = "center">
+        <img src = "assets/Notification_Preview.png" alt = "Notification_Preview" width= "500">
+    </p>
+    </details>
 
 ## Setup
 
