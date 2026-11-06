@@ -17,13 +17,22 @@ def embed(description, subtitle=None, icon_url=None):
 
 
 class SetupView(discord.ui.View):
+    active_sessions = {}
     def __init__(self, owner, guild_id):
         super().__init__(timeout=300)
         self.owner = owner
         self.guild_id = guild_id
         self.message = None
+        self.session_key = (guild_id, owner)
+        old = self.active_sessions.get(self.session_key)
+        if old and old is not self:
+            old.stop()
+        self.active_sessions[self.session_key] = self
 
     async def interaction_check(self, interaction):
+        if self.active_sessions.get(self.session_key) is not self:
+            await interaction.response.send_message("This setup session is no longer active. Run /setup again.", ephemeral=True)
+            return False
         if interaction.user.id != self.owner or interaction.guild_id != self.guild_id:
             await interaction.response.send_message("Please open your own setup panel with /setup.", ephemeral=True)
             return False
@@ -33,6 +42,8 @@ class SetupView(discord.ui.View):
         return True
 
     async def on_timeout(self):
+        if self.active_sessions.get(self.session_key) is self:
+            self.active_sessions.pop(self.session_key, None)
         for item in self.children:
             item.disabled = True
         if self.message:
@@ -53,6 +64,7 @@ class SetupView(discord.ui.View):
 
     @discord.ui.button(label="✕ Cancel", style=discord.ButtonStyle.secondary, row=1)
     async def cancel(self, interaction, button):
+        self.active_sessions.pop(self.session_key, None)
         await interaction.response.edit_message(content="ᴍᴇɴᴜ ᴄʟᴏsᴇᴅ.", embed=None, view=None)
         self.stop()
 
