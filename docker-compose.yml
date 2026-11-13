@@ -3,5 +3,5 @@ services:
     build: .
     container_name: discord-bot
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
