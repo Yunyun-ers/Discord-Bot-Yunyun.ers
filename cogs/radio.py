@@ -285,8 +285,15 @@ class RadioCog(commands.Cog):
             station_label, stream_url = STATIONS[station_key]
             local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
             ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
-            raw_source = discord.FFmpegPCMAudio(stream_url, executable=ffmpeg, before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", options="-vn")
-            source = discord.PCMVolumeTransformer(raw_source, volume=1)
+            # Send Opus directly from FFmpeg. This avoids the extra PCM -> Opus
+            # encoding step in Python, which can result in a silent voice stream
+            # on small/headless VPS instances even while FFmpeg is running.
+            source = discord.FFmpegOpusAudio(
+                stream_url,
+                executable=ffmpeg,
+                before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                options="-vn -ac 2 -ar 48000 -c:a libopus -b:a 128k",
+            )
             voice.play(source)
             self.voice_clients[interaction.guild_id] = voice
             self.bot.settings.set(interaction.guild_id, "radio.station", station_key)
