@@ -286,7 +286,7 @@ class RadioCog(commands.Cog):
             local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
             ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
             raw_source = discord.FFmpegPCMAudio(stream_url, executable=ffmpeg, before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5", options="-vn")
-            source = discord.PCMVolumeTransformer(raw_source, volume=0.03)
+            source = discord.PCMVolumeTransformer(raw_source, volume=1)
             voice.play(source)
             self.voice_clients[interaction.guild_id] = voice
             self.bot.settings.set(interaction.guild_id, "radio.station", station_key)
