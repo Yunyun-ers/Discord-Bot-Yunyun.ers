@@ -71,12 +71,11 @@ class RadioStationView(SetupView):
         self.voice_channel_id = voice_channel_id
         self.station = cog.bot.settings.get(guild_id, "radio.station")
         self.pending_station = self.station
-        self.volume = 3
+        self.volume = 50
         self.add_item(RadioStationSelect())
         self.start_button = StartRadioButton()
         self.start_button.disabled = self.station not in STATIONS
         self.add_item(self.start_button)
-        self.add_item(RadioVolumeButton())
         self.add_item(RadioCancelButton())
         self.add_item(BackToFeaturesButton())
 
@@ -285,13 +284,12 @@ class RadioCog(commands.Cog):
             local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
             ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
             _, stream_url = STATIONS[station_key]
-            raw_source = discord.FFmpegPCMAudio(
+            source = discord.FFmpegOpusAudio(
                 stream_url,
                 executable=ffmpeg,
                 before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options="-vn",
+                options="-vn -af volume=0.5",
             )
-            source = discord.PCMVolumeTransformer(raw_source, volume=0.03)
             voice.play(source)
             self.voice_clients[interaction.guild_id] = voice
             self.bot.settings.set(interaction.guild_id, "radio.station", station_key)
