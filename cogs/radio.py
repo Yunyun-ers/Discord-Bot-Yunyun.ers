@@ -288,7 +288,7 @@ class RadioCog(commands.Cog):
                 stream_url,
                 executable=ffmpeg,
                 before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options="-vn -af volume=0.5",
+                options="-vn -af volume=0.1",
             )
             voice.play(source)
             self.voice_clients[interaction.guild_id] = voice
