@@ -8,6 +8,8 @@ from discord.ext import commands, tasks
 from cogs.setup import FeatureView, SetupView, embed
 
 
+DEFAULT_RADIO_VOLUME = 5
+
 STATIONS = {
     "listen_jpop": ("LISTEN.moe — J-Pop", "https://listen.moe/stream"),
     "listen_kpop": ("LISTEN.moe — K-Pop", "https://listen.moe/kpop/stream"),
@@ -71,7 +73,7 @@ class RadioStationView(SetupView):
         self.voice_channel_id = voice_channel_id
         self.station = cog.bot.settings.get(guild_id, "radio.station")
         self.pending_station = self.station
-        self.volume = 50
+        self.volume = DEFAULT_RADIO_VOLUME
         self.add_item(RadioStationSelect())
         self.start_button = StartRadioButton()
         self.start_button.disabled = self.station not in STATIONS
@@ -288,7 +290,7 @@ class RadioCog(commands.Cog):
                 stream_url,
                 executable=ffmpeg,
                 before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options="-vn -af volume=0.1",
+                options=f"-vn -af volume={DEFAULT_RADIO_VOLUME / 100}",
             )
             voice.play(source)
             self.voice_clients[interaction.guild_id] = voice
