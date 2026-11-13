@@ -27,3 +27,4 @@ class SettingsStore:
     def set(self, guild_id, key, value):
         with self.connect() as db:
             db.execute("INSERT INTO settings VALUES (?, ?, ?) ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value", (guild_id, key, value))
+
