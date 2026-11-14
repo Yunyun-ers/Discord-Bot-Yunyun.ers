@@ -1,7 +1,9 @@
+import asyncio
 import os
 from pathlib import Path
 
 import discord
+import yt_dlp
 from discord import ui
 from discord.ext import commands, tasks
 
@@ -14,9 +16,46 @@ STATIONS = {
     "listen_jpop": ("LISTEN.moe — J-Pop", "https://listen.moe/stream"),
     "listen_kpop": ("LISTEN.moe — K-Pop", "https://listen.moe/kpop/stream"),
     "coolfahrenheit": ("COOLfahrenheit 93 — Thai Radio", "https://coolism-web.cdn.byteark.com/;stream/1"),
+    "the_ghost": ("The Ghost Radio — Live", "https://www.youtube.com/channel/UCM246zZ4qNNmFQ2WHnP_CRA/live"),
 }
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
 RADIO_BANNER_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/develop/assets/his.png"
+
+
+class QuietYtdlpLogger:
+    def debug(self, message):
+        pass
+
+    def warning(self, message):
+        pass
+
+    def error(self, message):
+        pass
+
+
+def resolve_youtube_live(page_url):
+    options = {
+        "format": "bestaudio/best",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 15,
+        "logger": QuietYtdlpLogger(),
+    }
+    try:
+        with yt_dlp.YoutubeDL(options) as downloader:
+            info = downloader.extract_info(page_url, download=False)
+    except yt_dlp.utils.DownloadError as exc:
+        message = str(exc).lower()
+        if "not currently live" in message or "no live" in message:
+            raise RuntimeError("The Ghost Radio is currently offline.") from exc
+        raise RuntimeError("Could not check The Ghost Radio live stream.") from exc
+    if not info or not info.get("is_live"):
+        raise RuntimeError("The Ghost Radio is currently offline.")
+    stream_url = info.get("url")
+    if not stream_url:
+        raise RuntimeError("The Ghost Radio live audio could not be resolved.")
+    return stream_url
 
 
 class RadioStationSelect(discord.ui.Select):
@@ -73,7 +112,6 @@ class RadioStationView(SetupView):
         self.voice_channel_id = voice_channel_id
         self.station = cog.bot.settings.get(guild_id, "radio.station")
         self.pending_station = self.station
-        self.volume = DEFAULT_RADIO_VOLUME
         self.add_item(RadioStationSelect())
         self.start_button = StartRadioButton()
         self.start_button.disabled = self.station not in STATIONS
@@ -93,7 +131,7 @@ class RadioStationView(SetupView):
         card = discord.Embed(
             title=": Radio Stations",
             description=(
-                f"**Info :**    🔊 : `{self.volume}%`\n"
+                "**Info :**\n"
                 "╭ Voice channel :\n"
                 f"**{room}**\n"
                 "╭ Radio Station :\n"
@@ -109,7 +147,7 @@ class RadioStationView(SetupView):
 
 class StartRadioButton(discord.ui.Button):
     def __init__(self):
-        super().__init__(style=discord.ButtonStyle.primary, label="▶", row=1)
+        super().__init__(style=discord.ButtonStyle.primary, label="", emoji=PLAY_EMOJI, row=1)
 
     async def callback(self, interaction):
         panel = self.view
@@ -145,31 +183,6 @@ class RadioPlaybackView(discord.ui.View):
         super().__init__(timeout=None); self.cog, self.guild_id = cog, guild_id; self.add_item(RadioToggleButton(cog, guild_id))
 
 
-class VolumeModal(discord.ui.Modal, title="Set Radio Volume"):
-    def __init__(self, panel):
-        super().__init__()
-        self.panel = panel
-
-    volume = discord.ui.TextInput(label="Volume (1-100)", placeholder="3", min_length=1, max_length=3, required=True)
-    async def on_submit(self, interaction):
-        try: value = int(self.volume.value)
-        except ValueError:
-            await interaction.response.send_message("Please enter a valid number.", ephemeral=True); return
-        if not 1 <= value <= 100:
-            await interaction.response.send_message("Volume must be between 1 and 100.", ephemeral=True); return
-        voice = interaction.client.get_cog("RadioCog").voice_clients.get(interaction.guild_id)
-        if not voice or not voice.source or not hasattr(voice.source, "volume"):
-            await interaction.response.send_message("Radio is not playing.", ephemeral=True); return
-        voice.source.volume = value / 100
-        self.panel.volume = value
-        await interaction.response.edit_message(embed=self.panel.card(), view=self.panel)
-
-
-class RadioVolumeButton(discord.ui.Button):
-    def __init__(self): super().__init__(label="Volume", style=discord.ButtonStyle.secondary, row=1)
-    async def callback(self, interaction): await interaction.response.send_modal(VolumeModal(self.view))
-
-
 class RadioToggleButton(discord.ui.Button):
     def __init__(self, cog, guild_id):
         super().__init__(label="⏸", style=discord.ButtonStyle.primary); self.cog, self.guild_id = cog, guild_id
@@ -197,7 +210,6 @@ class RadioStopButton(discord.ui.Button):
             await voice.disconnect()
         panel = self.view
         panel.start_button.disabled = False
-        panel.start_button.label = "▶"
         self.disabled = True
         await interaction.response.edit_message(content=None, embed=panel.card(), view=panel)
 
@@ -275,7 +287,11 @@ class RadioCog(commands.Cog):
         if not isinstance(channel, discord.VoiceChannel):
             await interaction.response.send_message("The configured voice channel no longer exists.", ephemeral=True)
             return
+        await interaction.response.defer()
         try:
+            _, stream_url = STATIONS[station_key]
+            if station_key == "the_ghost":
+                stream_url = await asyncio.to_thread(resolve_youtube_live, stream_url)
             voice = self.voice_clients.get(interaction.guild_id)
             if voice and voice.is_connected() and voice.channel != channel:
                 await voice.move_to(channel)
@@ -285,11 +301,10 @@ class RadioCog(commands.Cog):
                 voice.stop()
             local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
             ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
-            _, stream_url = STATIONS[station_key]
             source = discord.FFmpegOpusAudio(
                 stream_url,
                 executable=ffmpeg,
-                before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                before_options="-re -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
                 options=f"-vn -af volume={DEFAULT_RADIO_VOLUME / 100}",
             )
             voice.play(source)
@@ -299,16 +314,15 @@ class RadioCog(commands.Cog):
                 panel.station = station_key
                 panel.pending_station = station_key
                 panel.start_button.disabled = True
-                panel.start_button.label = "▶"
                 for item in list(panel.children):
                     if isinstance(item, RadioStopButton):
                         panel.remove_item(item)
                 panel.add_item(RadioStopButton(self, interaction.guild_id))
-                await interaction.response.edit_message(content=None, embed=panel.card(), view=panel)
+                await interaction.edit_original_response(content=None, embed=panel.card(), view=panel)
             else:
-                await interaction.response.edit_message(content=None, embed=None, view=RadioPlaybackView(self, interaction.guild_id))
+                await interaction.edit_original_response(content=None, embed=None, view=RadioPlaybackView(self, interaction.guild_id))
         except (discord.ClientException, discord.HTTPException, FileNotFoundError, RuntimeError) as exc:
-            await interaction.response.send_message(f"Could not start radio. Check FFmpeg and voice permissions. ({exc})", ephemeral=True)
+            await interaction.followup.send(f"Could not start radio. ({exc})", ephemeral=True)
 
 
 async def setup(bot):
