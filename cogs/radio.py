@@ -22,7 +22,7 @@ STATIONS = {
 }
 YOUTUBE_LIVE_STATIONS = {"lofi_hiphop", "lofi_jazz", "the_ghost"}
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
-RADIO_BANNER_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/develop/assets/his.png"
+RADIO_BANNER_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/his_1120x275.png"
 
 
 class QuietYtdlpLogger:
@@ -136,9 +136,8 @@ class RadioStationView(SetupView):
         selected = STATIONS.get(self.station, ("-", ""))[0]
         icon_url = self.cog.bot.user.display_avatar.url if self.cog.bot.user else None
         card = discord.Embed(
-            title=": Radio Stations",
             description=(
-                "**Info :**\n"
+                "\u2002\u2002\u2002\u2002` ʀᴀᴅɪᴏ sᴛᴀᴛɪᴏɴ ー ʏᴜɴʏᴜɴ ᴘ. `\n\n"
                 "╭ Voice channel :\n"
                 f"**{room}**\n"
                 "╭ Radio Station :\n"
