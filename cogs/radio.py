@@ -45,6 +45,14 @@ def resolve_youtube_live(page_url, station_label):
         "socket_timeout": 15,
         "logger": QuietYtdlpLogger(),
     }
+    pot_provider_url = os.getenv("YTDLP_POT_PROVIDER_URL")
+    if pot_provider_url:
+        # The bgutil provider is reachable only inside the Docker network.
+        # Use clients that can request a fresh PO token for YouTube playback.
+        options["extractor_args"] = {
+            "youtube": {"player_client": ["mweb,tv,web_safari"]},
+            "youtubepot-bgutilhttp": {"base_url": [pot_provider_url]},
+        }
     try:
         with yt_dlp.YoutubeDL(options) as downloader:
             info = downloader.extract_info(page_url, download=False)
