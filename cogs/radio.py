@@ -137,11 +137,11 @@ class RadioStationView(SetupView):
         icon_url = self.cog.bot.user.display_avatar.url if self.cog.bot.user else None
         card = discord.Embed(
             description=(
-                "\u2002\u2002\u2002\u2002` ʀᴀᴅɪᴏ sᴛᴀᴛɪᴏɴ ー ʏᴜɴʏᴜɴ ᴘ. `\n\n"
-                "╭ Voice channel :\n"
+                "╭ **ᴠᴏɪᴄᴇ ᴄʜᴀɴɴᴇʟ** :\n"
                 f"**{room}**\n"
-                "╭ Radio Station :\n"
-                f"**{selected}**"
+                "╭ sᴛᴀᴛɪᴏɴ :\n"
+                f"**{selected}**\n\n"
+                "\u2002\u2002\u2002\u2002` ʀᴀᴅɪᴏ sᴛᴀᴛɪᴏɴ ー ʏᴜɴʏᴜɴ ᴘ. `"
             ),
             colour=0x5865F2,
         )
