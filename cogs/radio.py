@@ -16,8 +16,11 @@ STATIONS = {
     "listen_jpop": ("LISTEN.moe — J-Pop", "https://listen.moe/stream"),
     "listen_kpop": ("LISTEN.moe — K-Pop", "https://listen.moe/kpop/stream"),
     "coolfahrenheit": ("COOLfahrenheit 93 — Thai Radio", "https://coolism-web.cdn.byteark.com/;stream/1"),
+    "lofi_hiphop": ("Lofi Girl — HipHop", "https://www.youtube.com/watch?v=rFZHOHl-L8A"),
+    "lofi_jazz": ("Lofi Girl — Jazz", "https://www.youtube.com/watch?v=E2vONfzoyRI"),
     "the_ghost": ("The Ghost Radio — Live", "https://www.youtube.com/channel/UCM246zZ4qNNmFQ2WHnP_CRA/live"),
 }
+YOUTUBE_LIVE_STATIONS = {"lofi_hiphop", "lofi_jazz", "the_ghost"}
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
 RADIO_BANNER_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/develop/assets/his.png"
 
@@ -33,7 +36,7 @@ class QuietYtdlpLogger:
         pass
 
 
-def resolve_youtube_live(page_url):
+def resolve_youtube_live(page_url, station_label):
     options = {
         "format": "bestaudio/best",
         "noplaylist": True,
@@ -48,13 +51,13 @@ def resolve_youtube_live(page_url):
     except yt_dlp.utils.DownloadError as exc:
         message = str(exc).lower()
         if "not currently live" in message or "no live" in message:
-            raise RuntimeError("The Ghost Radio is currently offline.") from exc
-        raise RuntimeError("Could not check The Ghost Radio live stream.") from exc
+            raise RuntimeError(f"{station_label} is currently offline.") from exc
+        raise RuntimeError(f"Could not check the {station_label} live stream.") from exc
     if not info or not info.get("is_live"):
-        raise RuntimeError("The Ghost Radio is currently offline.")
+        raise RuntimeError(f"{station_label} is currently offline.")
     stream_url = info.get("url")
     if not stream_url:
-        raise RuntimeError("The Ghost Radio live audio could not be resolved.")
+        raise RuntimeError(f"The {station_label} live audio could not be resolved.")
     return stream_url
 
 
@@ -68,9 +71,13 @@ class RadioStationSelect(discord.ui.Select):
 
     async def callback(self, interaction):
         panel = self.view
-        panel.pending_station = self.values[0]
+        selected_station = self.values[0]
+        if hasattr(panel, "selected_station"):
+            panel.selected_station = selected_station
+        else:
+            panel.pending_station = selected_station
         for option in self.options:
-            option.default = option.value == self.values[0]
+            option.default = option.value == selected_station
             if option.default:
                 self.placeholder = option.label
         panel.start_button.disabled = panel.pending_station not in STATIONS
@@ -289,9 +296,9 @@ class RadioCog(commands.Cog):
             return
         await interaction.response.defer()
         try:
-            _, stream_url = STATIONS[station_key]
-            if station_key == "the_ghost":
-                stream_url = await asyncio.to_thread(resolve_youtube_live, stream_url)
+            station_label, stream_url = STATIONS[station_key]
+            if station_key in YOUTUBE_LIVE_STATIONS:
+                stream_url = await asyncio.to_thread(resolve_youtube_live, stream_url, station_label)
             voice = self.voice_clients.get(interaction.guild_id)
             if voice and voice.is_connected() and voice.channel != channel:
                 await voice.move_to(channel)
