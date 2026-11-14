@@ -3,16 +3,6 @@ services:
     build: .
     container_name: discord-bot
     restart: unless-stopped
-    depends_on:
-      - bgutil-provider
     environment:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
-      YTDLP_POT_PROVIDER_URL: "http://bgutil-provider:4416"
 
-  bgutil-provider:
-    image: brainicism/bgutil-ytdlp-pot-provider:2.0.2
-    container_name: bgutil-provider
-    restart: unless-stopped
-    init: true
-    expose:
-      - "4416"
