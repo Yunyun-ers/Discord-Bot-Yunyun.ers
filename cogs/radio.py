@@ -99,10 +99,11 @@ def resolve_youtube_live(page_url, station_label):
 
 
 class RadioStationView(ui.LayoutView):
-    def __init__(self, cog, owner, guild_id, voice_channel_id, *, from_setup=False):
+    def __init__(self, cog, owner, guild_id, voice_channel_id, *, from_setup=False, playback=None):
         super().__init__(timeout=300)
         self.cog, self.owner, self.guild_id = cog, owner, guild_id
         self.from_setup = from_setup
+        self.playback = playback
         self.voice_channel_id = voice_channel_id
         self.message = None
         self.pending_station = cog.bot.settings.get(guild_id, "radio.station")
@@ -184,6 +185,15 @@ class RadioStationView(ui.LayoutView):
         self.stop_session()
 
     async def cancel(self, interaction):
+        playback = self.playback
+        if (
+            playback and not playback.is_finished()
+            and self.cog.voice_clients.get(self.guild_id) is playback.voice
+            and playback.voice.is_connected() and playback.voice.source is playback.source
+        ):
+            await interaction.response.edit_message(view=playback)
+            self.stop_session()
+            return
         await self.close(interaction)
 
 class RadioPlaybackView(ui.LayoutView):
@@ -239,7 +249,7 @@ class RadioPlaybackView(ui.LayoutView):
         await interaction.response.edit_message(view=self)
 
     async def change_station(self, interaction):
-        await self.cog.show_radio_menu(interaction)
+        await self.cog.show_radio_menu(interaction, playback=self)
 
     async def disconnect(self, interaction):
         await interaction.response.defer()
@@ -299,18 +309,21 @@ class RadioCog(commands.Cog):
     async def radio_command(self, interaction: discord.Interaction):
         await self.show_radio_menu(interaction)
 
-    async def show_radio_menu(self, interaction: discord.Interaction):
+    async def show_radio_menu(self, interaction: discord.Interaction, *, playback=None):
         voice_state = getattr(interaction.user, "voice", None)
         channel = voice_state.channel if voice_state else None
         if not isinstance(channel, discord.VoiceChannel):
             await interaction.response.send_message("Join a voice channel first, then run /radio.", ephemeral=True)
             return
-        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id)
+        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id, playback=playback)
         key = (interaction.guild_id, interaction.user.id)
         old = self.active_sessions.get(key)
         self.active_sessions[key] = view
         try:
-            await interaction.response.send_message(view=view, ephemeral=True)
+            if playback is None:
+                await interaction.response.send_message(view=view, ephemeral=True)
+            else:
+                await interaction.response.edit_message(view=view)
         except discord.HTTPException:
             if self.active_sessions.get(key) is view:
                 if old and not old.is_finished():
