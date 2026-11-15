@@ -1,8 +1,21 @@
 services:
   discord-bot:
     build: .
+    pull_policy: build
     container_name: discord-bot
     restart: unless-stopped
     environment:
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in Portainer}
+      LAVALINK_URI: http://lavalink:2333
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in Portainer}
+    depends_on:
+      - lavalink
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4.2.2
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in Portainer}
+      SPRING_APPLICATION_JSON: >-
+        {"lavalink":{"plugins":[{"dependency":"dev.lavalink.youtube:youtube-plugin:1.18.2","snapshot":false}],"server":{"sources":{"youtube":false,"http":true,"local":false}}},"plugins":{"youtube":{"enabled":true,"allowSearch":true}}}
 

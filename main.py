@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import discord
+import wavelink
 from discord.ext import commands
 from dotenv import load_dotenv
 from services.settings import SettingsStore
@@ -16,10 +17,16 @@ class DiscordBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.members = True
+        intents.message_content = True
         super().__init__(command_prefix="!", intents=intents)
         self.settings = SettingsStore(BASE_DIR / "data" / "bot.db")
 
     async def setup_hook(self):
+        try:
+            await wavelink.Pool.connect(nodes=[wavelink.Node(uri=os.getenv('LAVALINK_URI', 'http://127.0.0.1:2333'), password=os.getenv('LAVALINK_PASSWORD', 'youshallnotpass'))], client=self)
+            logger.info('Connected to Lavalink')
+        except Exception as exc:
+            logger.warning('Lavalink unavailable: %s', exc)
         for path in sorted((BASE_DIR / "cogs").glob("*.py")):
             if not path.name.startswith("_"):
                 await self.load_extension(f"cogs.{path.stem}")

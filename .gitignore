@@ -1,4 +1,6 @@
 .env
+lavalink/
+ffmpeg.rar
 .venv/
 venv/
 __pycache__/

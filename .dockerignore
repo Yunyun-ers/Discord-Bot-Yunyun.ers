@@ -1,0 +1,11 @@
+.git
+.env*
+*.env
+.venv
+venv
+**/__pycache__
+data
+lavalink
+ffmpeg.exe
+ffmpeg*.rar
+ffmpeg*.zip

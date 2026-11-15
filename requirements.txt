@@ -7,3 +7,4 @@ aiohttp>=3.10,<4
 Pillow>=12,<13
 yt-dlp>=2026.10.26
 yt-dlp-getpot-wpc
+wavelink==3.5.2

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -11,6 +12,33 @@ from cogs.setup import FeatureView, SetupView, embed
 
 
 DEFAULT_RADIO_VOLUME = 5
+logger = logging.getLogger(__name__)
+
+
+class RadioPCMSource(discord.PCMVolumeTransformer):
+    def __init__(self, source):
+        super().__init__(source, volume=DEFAULT_RADIO_VOLUME / 100)
+        self.frames_read = 0
+        self.signal_frames = 0
+
+    def read(self):
+        frame = super().read()
+        if frame:
+            self.frames_read += 1
+            has_signal = any(frame)
+            if self.frames_read == 1:
+                logger.info("Radio first PCM frame: %d bytes, nonzero=%s", len(frame), has_signal)
+            if has_signal:
+                self.signal_frames += 1
+                if self.signal_frames == 1:
+                    logger.info("Radio first nonzero PCM frame: #%d (%d bytes)", self.frames_read, len(frame))
+        return frame
+
+    def finished(self, error):
+        if error:
+            logger.error("Radio playback failed after %d PCM frames (%d nonzero, %s)", self.frames_read, self.signal_frames, type(error).__name__, exc_info=error)
+        else:
+            logger.info("Radio player ended after %d PCM frames (%d nonzero)", self.frames_read, self.signal_frames)
 
 STATIONS = {
     "listen_jpop": ("LISTEN.moe — J-Pop", "https://listen.moe/stream"),
@@ -36,7 +64,7 @@ class QuietYtdlpLogger:
         pass
 
 
-def resolve_youtube_live(page_url, station_label):
+def youtube_media_info(page_url):
     options = {
         "format": "bestaudio/best",
         "noplaylist": True,
@@ -50,9 +78,13 @@ def resolve_youtube_live(page_url, station_label):
     options["extractor_args"] = {
         "youtube": {"player_client": ["mweb,tv,web_safari"]},
     }
+    with yt_dlp.YoutubeDL(options) as downloader:
+        return downloader.extract_info(page_url, download=False)
+
+
+def resolve_youtube_live(page_url, station_label):
     try:
-        with yt_dlp.YoutubeDL(options) as downloader:
-            info = downloader.extract_info(page_url, download=False)
+        info = youtube_media_info(page_url)
     except yt_dlp.utils.DownloadError as exc:
         message = str(exc).lower()
         if "not currently live" in message or "no live" in message:
@@ -226,6 +258,46 @@ class RadioStopButton(discord.ui.Button):
 
 
 class RadioCog(commands.Cog):
+    @commands.command(name="radio-test")
+    @commands.guild_only()
+    async def radio_test(self, ctx: commands.Context):
+        state = getattr(ctx.author, "voice", None)
+        channel = state.channel if state else None
+        if not isinstance(channel, discord.VoiceChannel) or ctx.voice_client:
+            return await ctx.send("เข้าห้องเสียงและหยุดตัวเล่นเดิมให้บอทออกจากห้องก่อนครับ")
+        voice = None
+        try:
+            voice = await channel.connect()
+            local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
+            ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
+            for mode, frequency, factory in (
+                ("PCM", 440, discord.FFmpegPCMAudio),
+                ("Opus", 660, discord.FFmpegOpusAudio),
+            ):
+                await ctx.send(f"ทดสอบ {mode} · {frequency} Hz")
+                source = factory(
+                    f"sine=frequency={frequency}:sample_rate=48000:duration=3",
+                    executable=ffmpeg,
+                    before_options="-f lavfi",
+                )
+                try:
+                    voice.play(source)
+                except Exception:
+                    source.cleanup()
+                    raise
+                for _ in range(60):
+                    if not voice.is_playing():
+                        break
+                    await asyncio.sleep(0.1)
+                voice.stop()
+                await asyncio.sleep(0.6)
+        except Exception:
+            logger.exception("Radio voice test failed")
+            await ctx.send("ทดสอบเสียงไม่สำเร็จ ดู Radio voice test failed ใน Terminal ครับ")
+        finally:
+            if voice and voice.is_connected():
+                await voice.disconnect()
+
     setup_label = "Radio"
 
     def __init__(self, bot):
@@ -312,13 +384,18 @@ class RadioCog(commands.Cog):
                 voice.stop()
             local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
             ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
-            source = discord.FFmpegOpusAudio(
+            raw_source = discord.FFmpegPCMAudio(
                 stream_url,
                 executable=ffmpeg,
                 before_options="-re -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                options=f"-vn -af volume={DEFAULT_RADIO_VOLUME / 100}",
+                options="-vn",
             )
-            voice.play(source)
+            source = RadioPCMSource(raw_source)
+            try:
+                voice.play(source, after=source.finished)
+            except Exception:
+                source.cleanup()
+                raise
             self.voice_clients[interaction.guild_id] = voice
             self.bot.settings.set(interaction.guild_id, "radio.station", station_key)
             if panel is not None:
