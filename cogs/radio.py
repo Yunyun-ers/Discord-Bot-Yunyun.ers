@@ -50,6 +50,7 @@ STATIONS = {
 YOUTUBE_LIVE_STATIONS = {"lofi_hiphop", "lofi_jazz", "the_ghost"}
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
 RADIO_AVATAR_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/Avatar.png"
+RADIO_PLAYBACK_IMAGE_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/FaceWriteing.png"
 
 
 class QuietYtdlpLogger:
@@ -205,7 +206,7 @@ class RadioPlaybackView(ui.LayoutView):
         self.stop_button.callback = self.disconnect
         controls = ui.ActionRow(self.pause_button, self.station_button, self.stop_button)
         self.add_item(ui.Container(
-            ui.Section(heading, accessory=ui.Thumbnail(cog.bot.user.display_avatar.url)),
+            ui.Section(heading, accessory=ui.Thumbnail(RADIO_PLAYBACK_IMAGE_URL)),
             ui.Separator(),
             self.status,
             controls,
@@ -307,14 +308,18 @@ class RadioCog(commands.Cog):
         view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id)
         key = (interaction.guild_id, interaction.user.id)
         old = self.active_sessions.get(key)
-        if old and old.is_finished():
-            self.active_sessions.pop(key, None)
-            old = None
-        if old:
-            await interaction.response.send_message("You already have an open Radio menu. Use that menu or cancel it first.", ephemeral=True)
-            return
         self.active_sessions[key] = view
-        await interaction.response.send_message(view=view, ephemeral=True)
+        try:
+            await interaction.response.send_message(view=view, ephemeral=True)
+        except discord.HTTPException:
+            if self.active_sessions.get(key) is view:
+                if old and not old.is_finished():
+                    self.active_sessions[key] = old
+                else:
+                    self.active_sessions.pop(key)
+            raise
+        if old:
+            old.stop()
         view.message = await interaction.original_response()
 
     async def start_radio(self, interaction, voice_channel_id, station_key, panel=None):
