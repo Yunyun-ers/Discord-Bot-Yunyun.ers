@@ -8,10 +8,9 @@ import yt_dlp
 from discord import ui
 from discord.ext import commands, tasks
 
-from cogs.setup import FeatureView, SetupView, embed
-
-
 DEFAULT_RADIO_VOLUME = 5
+STATION_ICON = "<:boombox:1571635076607901777>"
+VOICE_ICON = "<:messagescircle:1571635093305430036>"
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +49,7 @@ STATIONS = {
 }
 YOUTUBE_LIVE_STATIONS = {"lofi_hiphop", "lofi_jazz", "the_ghost"}
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
-RADIO_BANNER_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/his_1120x275.png"
+RADIO_AVATAR_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/Avatar.png"
 
 
 class QuietYtdlpLogger:
@@ -98,208 +97,161 @@ def resolve_youtube_live(page_url, station_label):
     return stream_url
 
 
-class RadioStationSelect(discord.ui.Select):
-    def __init__(self):
-        super().__init__(
-            placeholder="Select a radio station…",
-            options=[discord.SelectOption(label=f"> {label}", value=key) for key, (label, _) in STATIONS.items()],
-            row=0,
-        )
-
-    async def callback(self, interaction):
-        panel = self.view
-        selected_station = self.values[0]
-        if hasattr(panel, "selected_station"):
-            panel.selected_station = selected_station
-        else:
-            panel.pending_station = selected_station
-        for option in self.options:
-            option.default = option.value == selected_station
-            if option.default:
-                self.placeholder = option.label
-        panel.start_button.disabled = panel.pending_station not in STATIONS
-        await interaction.response.edit_message(view=panel)
-
-
-class RadioStationButton(discord.ui.Button):
-    def __init__(self): super().__init__(label="Station", style=discord.ButtonStyle.secondary, row=0)
-    async def callback(self, interaction):
-        await interaction.response.edit_message(content="Select a station, then press Select.", view=RadioStationEditorView(self.view))
-
-
-class RadioStationEditorView(discord.ui.View):
-    def __init__(self, panel):
-        super().__init__(timeout=300); self.panel = panel; self.selected_station = panel.station
-        self.add_item(RadioStationSelect()); self.add_item(RadioStationConfirmButton()); self.add_item(RadioStationBackButton())
-
-
-class RadioStationConfirmButton(discord.ui.Button):
-    def __init__(self): super().__init__(label="Select", style=discord.ButtonStyle.success, row=1)
-    async def callback(self, interaction):
-        view = self.view; view.panel.station = view.selected_station
-        view.panel.start_button.disabled = view.panel.station not in STATIONS
-        await interaction.response.edit_message(content=None, embed=view.panel.card(), view=view.panel)
-
-
-class RadioStationBackButton(discord.ui.Button):
-    def __init__(self): super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=1)
-    async def callback(self, interaction): await interaction.response.edit_message(content=None, embed=self.view.panel.card(), view=self.view.panel)
-
-
-class RadioStationView(SetupView):
-    def __init__(self, cog, owner, guild_id, voice_channel_id):
-        super().__init__(owner, guild_id)
-        for item in list(self.children):
-            if isinstance(item, discord.ui.Button) and item.label == "✕ Cancel":
-                self.remove_item(item)
-        self.cog = cog
+class RadioStationView(ui.LayoutView):
+    def __init__(self, cog, owner, guild_id, voice_channel_id, *, from_setup=False):
+        super().__init__(timeout=300)
+        self.cog, self.owner, self.guild_id = cog, owner, guild_id
+        self.from_setup = from_setup
         self.voice_channel_id = voice_channel_id
-        self.station = cog.bot.settings.get(guild_id, "radio.station")
-        self.pending_station = self.station
-        self.add_item(RadioStationSelect())
-        self.start_button = StartRadioButton()
-        self.start_button.disabled = self.station not in STATIONS
-        self.add_item(self.start_button)
-        self.add_item(RadioCancelButton())
-        self.add_item(BackToFeaturesButton())
+        self.message = None
+        self.pending_station = cog.bot.settings.get(guild_id, "radio.station")
+
+        self.title = ui.TextDisplay(self.summary())
+        self.select = ui.Select(
+            placeholder="เลือกสถานีวิทยุ",
+            options=[
+                discord.SelectOption(label=label, value=key, default=key == self.pending_station)
+                for key, (label, _) in STATIONS.items()
+            ],
+        )
+        self.start_button = ui.Button(
+            label="เล่น", emoji=PLAY_EMOJI, style=discord.ButtonStyle.primary,
+            disabled=self.pending_station not in STATIONS,
+        )
+        self.cancel_button = ui.Button(label="Cancel", style=discord.ButtonStyle.secondary)
+        self.select.callback = self.select_station
+        self.start_button.callback = self.play
+        self.cancel_button.callback = self.cancel
+        self.add_item(ui.Container(
+            ui.Section(self.title, accessory=ui.Thumbnail(RADIO_AVATAR_URL)),
+            ui.ActionRow(self.select),
+            ui.ActionRow(self.start_button, self.cancel_button),
+            accent_colour=0xFFA3A8,
+        ))
+
+    def summary(self):
+        station = STATIONS.get(self.pending_station, ("ยังไม่ได้เลือกสถานี", ""))[0]
+        return f"### Radio Station\n{STATION_ICON} : **{station}**\n\n{VOICE_ICON} : <#{self.voice_channel_id}>"
+
+    async def interaction_check(self, interaction):
+        key = (self.guild_id, self.owner)
+        if (
+            interaction.user.id == self.owner
+            and interaction.guild_id == self.guild_id
+            and self.cog.active_sessions.get(key) is self
+            and (not self.from_setup or interaction.permissions.manage_guild)
+        ):
+            return True
+        await interaction.response.send_message("เมนูนี้ใช้ได้เฉพาะผู้เปิดที่ยังมีสิทธิ์ครับ", ephemeral=True)
+        return False
 
     def stop_session(self):
-        self.cog.active_sessions.pop((self.guild_id, self.owner), None)
+        key = (self.guild_id, self.owner)
+        if self.cog.active_sessions.get(key) is self:
+            self.cog.active_sessions.pop(key)
         self.stop()
 
-    def card(self):
-        channel = self.cog.bot.get_channel(self.voice_channel_id) if self.voice_channel_id else None
-        room = channel.mention if channel else "-"
-        selected = STATIONS.get(self.station, ("-", ""))[0]
-        icon_url = self.cog.bot.user.display_avatar.url if self.cog.bot.user else None
-        card = discord.Embed(
-            description=(
-                "╭ **ᴠᴏɪᴄᴇ ᴄʜᴀɴɴᴇʟ** :\n"
-                f"**{room}**\n"
-                "╭ sᴛᴀᴛɪᴏɴ :\n"
-                f"**{selected}**\n\n"
-                "\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002\u2002` ʀᴀᴅɪᴏ sᴛᴀᴛɪᴏɴ ー ʏᴜɴʏᴜɴ ᴘ. `"
-            ),
-            colour=0x5865F2,
+    async def on_timeout(self):
+        self.stop_session()
+        for control in (self.select, self.start_button, self.cancel_button):
+            control.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+    async def select_station(self, interaction):
+        self.pending_station = self.select.values[0]
+        for option in self.select.options:
+            option.default = option.value == self.pending_station
+        self.title.content = self.summary()
+        self.start_button.disabled = False
+        await interaction.response.edit_message(view=self)
+
+    async def play(self, interaction):
+        state = getattr(interaction.user, "voice", None)
+        if not state or not isinstance(state.channel, discord.VoiceChannel):
+            return await interaction.response.send_message("เข้าห้องเสียงก่อนเล่น Radio ครับ", ephemeral=True)
+        self.voice_channel_id = state.channel.id
+        await self.cog.start_radio(interaction, self.voice_channel_id, self.pending_station, self)
+
+    async def close(self, interaction):
+        closed = ui.LayoutView()
+        closed.add_item(ui.TextDisplay("ปิดเมนู Radio แล้ว"))
+        await interaction.response.edit_message(view=closed)
+        self.stop_session()
+
+    async def cancel(self, interaction):
+        await self.close(interaction)
+
+class RadioPlaybackView(ui.LayoutView):
+    def __init__(self, cog, guild_id, station_label, voice, source):
+        super().__init__(timeout=900)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.station_label = station_label
+        self.voice = voice
+        self.source = source
+        self.status = ui.TextDisplay("▶ กำลังเล่น")
+        heading = ui.TextDisplay(
+            f"### Currently Playing\n{STATION_ICON} : **{station_label}**\n\n{VOICE_ICON} : {voice.channel.mention}"
         )
-        if icon_url:
-            card.set_author(name="ʏᴜɴʏᴜɴ ᴘ.", icon_url=icon_url)
-        card.set_image(url=RADIO_BANNER_URL)
-        return card
+        self.pause_button = ui.Button(label="พัก", style=discord.ButtonStyle.secondary)
+        self.station_button = ui.Button(label="เปลี่ยนสถานี", style=discord.ButtonStyle.secondary)
+        self.stop_button = ui.Button(label="หยุด", style=discord.ButtonStyle.danger)
+        self.pause_button.callback = self.toggle
+        self.station_button.callback = self.change_station
+        self.stop_button.callback = self.disconnect
+        controls = ui.ActionRow(self.pause_button, self.station_button, self.stop_button)
+        self.add_item(ui.Container(
+            ui.Section(heading, accessory=ui.Thumbnail(cog.bot.user.display_avatar.url)),
+            ui.Separator(),
+            self.status,
+            controls,
+            accent_colour=0xFFA3A8,
+        ))
 
+    async def interaction_check(self, interaction):
+        state = getattr(interaction.user, "voice", None)
+        if (
+            self.cog.voice_clients.get(self.guild_id) is self.voice
+            and self.voice.is_connected()
+            and self.voice.source is self.source
+            and state and state.channel == self.voice.channel
+        ):
+            return True
+        await interaction.response.send_message(
+            "ต้องอยู่ในห้องเดียวกับ Radio และใช้การ์ดของสถานีที่กำลังเล่นครับ", ephemeral=True
+        )
+        return False
 
-class StartRadioButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(style=discord.ButtonStyle.primary, label="", emoji=PLAY_EMOJI, row=1)
+    async def toggle(self, interaction):
+        if self.voice.is_paused():
+            self.voice.resume()
+            self.pause_button.label = "พัก"
+            self.status.content = "▶ กำลังเล่น"
+        elif self.voice.is_playing():
+            self.voice.pause()
+            self.pause_button.label = "เล่นต่อ"
+            self.status.content = "⏸ พักอยู่"
+        await interaction.response.edit_message(view=self)
 
-    async def callback(self, interaction):
-        panel = self.view
-        current_voice = getattr(interaction.user, "voice", None)
-        if current_voice and isinstance(current_voice.channel, discord.VoiceChannel):
-            panel.voice_channel_id = current_voice.channel.id
-        await panel.cog.start_radio(interaction, panel.voice_channel_id, panel.pending_station, panel)
+    async def change_station(self, interaction):
+        await self.cog.show_radio_menu(interaction)
 
-
-class BackToFeaturesButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Back", style=discord.ButtonStyle.secondary, row=2)
-
-    async def callback(self, interaction):
-        panel = self.view
-        view = FeatureView(panel.cog.bot, panel.owner, panel.guild_id)
-        await interaction.response.edit_message(content=None, embed=view.card(), view=view)
-        view.message = panel.message
-        panel.stop_session()
-
-
-class RadioCancelButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="✕ Cancel", style=discord.ButtonStyle.secondary, row=2)
-
-    async def callback(self, interaction):
-        await interaction.response.edit_message(content="ᴍᴇɴᴜ ᴄʟᴏsᴇᴅ.", embed=None, view=None)
-        self.view.stop_session()
-
-
-class RadioPlaybackView(discord.ui.View):
-    def __init__(self, cog, guild_id):
-        super().__init__(timeout=None); self.cog, self.guild_id = cog, guild_id; self.add_item(RadioToggleButton(cog, guild_id))
-
-
-class RadioToggleButton(discord.ui.Button):
-    def __init__(self, cog, guild_id):
-        super().__init__(label="⏸", style=discord.ButtonStyle.primary); self.cog, self.guild_id = cog, guild_id
-
-    async def callback(self, interaction):
-        voice = self.cog.voice_clients.get(self.guild_id)
-        if not voice or not voice.is_connected():
-            await interaction.response.send_message("Radio is not connected.", ephemeral=True); return
-        if voice.is_playing():
-            voice.pause(); self.label = "▶"
-        elif voice.is_paused():
-            voice.resume(); self.label = "⏸"
-        await interaction.response.edit_message(view=self.view)
-
-
-class RadioStopButton(discord.ui.Button):
-    def __init__(self, cog, guild_id):
-        super().__init__(label="ᴅɪsᴄᴏɴɴᴇᴄᴛ", style=discord.ButtonStyle.danger, row=1)
-        self.cog, self.guild_id = cog, guild_id
-
-    async def callback(self, interaction):
-        voice = self.cog.voice_clients.pop(self.guild_id, None)
-        if voice:
-            voice.stop()
-            await voice.disconnect()
-        panel = self.view
-        panel.start_button.disabled = False
-        self.disabled = True
-        await interaction.response.edit_message(content=None, embed=panel.card(), view=panel)
+    async def disconnect(self, interaction):
+        await interaction.response.defer()
+        await self.voice.disconnect()
+        if self.cog.voice_clients.get(self.guild_id) is self.voice:
+            self.cog.voice_clients.pop(self.guild_id)
+        self.status.content = "⏹ หยุดแล้ว"
+        self.pause_button.disabled = self.station_button.disabled = self.stop_button.disabled = True
+        await interaction.edit_original_response(view=self)
+        self.stop()
 
 
 class RadioCog(commands.Cog):
-    @commands.command(name="radio-test")
-    @commands.guild_only()
-    async def radio_test(self, ctx: commands.Context):
-        state = getattr(ctx.author, "voice", None)
-        channel = state.channel if state else None
-        if not isinstance(channel, discord.VoiceChannel) or ctx.voice_client:
-            return await ctx.send("เข้าห้องเสียงและหยุดตัวเล่นเดิมให้บอทออกจากห้องก่อนครับ")
-        voice = None
-        try:
-            voice = await channel.connect()
-            local_ffmpeg = Path(__file__).resolve().parents[1] / "ffmpeg.exe"
-            ffmpeg = os.getenv("RADIO_FFMPEG_PATH", str(local_ffmpeg if local_ffmpeg.exists() else "ffmpeg"))
-            for mode, frequency, factory in (
-                ("PCM", 440, discord.FFmpegPCMAudio),
-                ("Opus", 660, discord.FFmpegOpusAudio),
-            ):
-                await ctx.send(f"ทดสอบ {mode} · {frequency} Hz")
-                source = factory(
-                    f"sine=frequency={frequency}:sample_rate=48000:duration=3",
-                    executable=ffmpeg,
-                    before_options="-f lavfi",
-                )
-                try:
-                    voice.play(source)
-                except Exception:
-                    source.cleanup()
-                    raise
-                for _ in range(60):
-                    if not voice.is_playing():
-                        break
-                    await asyncio.sleep(0.1)
-                voice.stop()
-                await asyncio.sleep(0.6)
-        except Exception:
-            logger.exception("Radio voice test failed")
-            await ctx.send("ทดสอบเสียงไม่สำเร็จ ดู Radio voice test failed ใน Terminal ครับ")
-        finally:
-            if voice and voice.is_connected():
-                await voice.disconnect()
-
-    setup_label = "Radio"
-
     def __init__(self, bot):
         self.bot = bot
         self.voice_clients = {}
@@ -336,14 +288,17 @@ class RadioCog(commands.Cog):
             else:
                 await interaction.response.send_message(message, ephemeral=True)
             return
-        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id)
+        view = RadioStationView(self, interaction.user.id, interaction.guild_id, channel.id, from_setup=True)
         self.active_sessions[(interaction.guild_id, interaction.user.id)] = view
-        await interaction.response.edit_message(embed=view.card(), view=view)
+        await interaction.response.edit_message(content=None, embed=None, view=view)
         view.message = await interaction.original_response()
 
     @discord.app_commands.command(name="radio", description="Open the radio panel for your current voice channel")
     @discord.app_commands.guild_only()
     async def radio_command(self, interaction: discord.Interaction):
+        await self.show_radio_menu(interaction)
+
+    async def show_radio_menu(self, interaction: discord.Interaction):
         voice_state = getattr(interaction.user, "voice", None)
         channel = voice_state.channel if voice_state else None
         if not isinstance(channel, discord.VoiceChannel):
@@ -359,7 +314,7 @@ class RadioCog(commands.Cog):
             await interaction.response.send_message("You already have an open Radio menu. Use that menu or cancel it first.", ephemeral=True)
             return
         self.active_sessions[key] = view
-        await interaction.response.send_message(embed=view.card(), view=view, ephemeral=True)
+        await interaction.response.send_message(view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
     async def start_radio(self, interaction, voice_channel_id, station_key, panel=None):
@@ -398,17 +353,13 @@ class RadioCog(commands.Cog):
                 raise
             self.voice_clients[interaction.guild_id] = voice
             self.bot.settings.set(interaction.guild_id, "radio.station", station_key)
+            await interaction.edit_original_response(
+                content=None,
+                embed=None,
+                view=RadioPlaybackView(self, interaction.guild_id, station_label, voice, source),
+            )
             if panel is not None:
-                panel.station = station_key
-                panel.pending_station = station_key
-                panel.start_button.disabled = True
-                for item in list(panel.children):
-                    if isinstance(item, RadioStopButton):
-                        panel.remove_item(item)
-                panel.add_item(RadioStopButton(self, interaction.guild_id))
-                await interaction.edit_original_response(content=None, embed=panel.card(), view=panel)
-            else:
-                await interaction.edit_original_response(content=None, embed=None, view=RadioPlaybackView(self, interaction.guild_id))
+                panel.stop_session()
         except (discord.ClientException, discord.HTTPException, FileNotFoundError, RuntimeError) as exc:
             await interaction.followup.send(f"Could not start radio. ({exc})", ephemeral=True)
 
