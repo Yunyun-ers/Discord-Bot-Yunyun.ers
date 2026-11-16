@@ -1,10 +1,8 @@
-import asyncio
 import logging
 import os
 from pathlib import Path
 
 import discord
-import yt_dlp
 from discord import ui
 from discord.ext import commands, tasks
 
@@ -43,59 +41,12 @@ STATIONS = {
     "listen_jpop": ("LISTEN.moe — J-Pop", "https://listen.moe/stream"),
     "listen_kpop": ("LISTEN.moe — K-Pop", "https://listen.moe/kpop/stream"),
     "coolfahrenheit": ("COOLfahrenheit 93 — Thai Radio", "https://coolism-web.cdn.byteark.com/;stream/1"),
-    "lofi_hiphop": ("Lofi Girl — HipHop", "https://www.youtube.com/watch?v=rFZHOHl-L8A"),
-    "lofi_jazz": ("Lofi Girl — Jazz", "https://www.youtube.com/watch?v=E2vONfzoyRI"),
-    "the_ghost": ("The Ghost Radio — Live", "https://www.youtube.com/channel/UCM246zZ4qNNmFQ2WHnP_CRA/live"),
 }
-YOUTUBE_LIVE_STATIONS = {"lofi_hiphop", "lofi_jazz", "the_ghost"}
 PLAY_EMOJI = discord.PartialEmoji(name="play", id=1474749326608699432)
 RADIO_AVATAR_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/Avatar.png"
 RADIO_PLAYBACK_IMAGE_URL = "https://raw.githubusercontent.com/Yunyun-ers/Discord-Bot-Yunyun.ers/refs/heads/docker_version/assets/FaceWriteing.png"
 
 
-class QuietYtdlpLogger:
-    def debug(self, message):
-        pass
-
-    def warning(self, message):
-        pass
-
-    def error(self, message):
-        pass
-
-
-def youtube_media_info(page_url):
-    options = {
-        "format": "bestaudio/best",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "socket_timeout": 15,
-        "logger": QuietYtdlpLogger(),
-    }
-    # yt-dlp-getpot-wpc automatically mints YouTube PO tokens through the
-    # Chromium browser installed in the bot image. No account cookies are used.
-    options["extractor_args"] = {
-        "youtube": {"player_client": ["mweb,tv,web_safari"]},
-    }
-    with yt_dlp.YoutubeDL(options) as downloader:
-        return downloader.extract_info(page_url, download=False)
-
-
-def resolve_youtube_live(page_url, station_label):
-    try:
-        info = youtube_media_info(page_url)
-    except yt_dlp.utils.DownloadError as exc:
-        message = str(exc).lower()
-        if "not currently live" in message or "no live" in message:
-            raise RuntimeError(f"{station_label} is currently offline.") from exc
-        raise RuntimeError(f"Could not check the {station_label} live stream.") from exc
-    if not info or not info.get("is_live"):
-        raise RuntimeError(f"{station_label} is currently offline.")
-    stream_url = info.get("url")
-    if not stream_url:
-        raise RuntimeError(f"The {station_label} live audio could not be resolved.")
-    return stream_url
 
 
 class RadioStationView(ui.LayoutView):
@@ -346,8 +297,6 @@ class RadioCog(commands.Cog):
         await interaction.response.defer()
         try:
             station_label, stream_url = STATIONS[station_key]
-            if station_key in YOUTUBE_LIVE_STATIONS:
-                stream_url = await asyncio.to_thread(resolve_youtube_live, stream_url, station_label)
             voice = self.voice_clients.get(interaction.guild_id)
             if voice and voice.is_connected() and voice.channel != channel:
                 await voice.move_to(channel)

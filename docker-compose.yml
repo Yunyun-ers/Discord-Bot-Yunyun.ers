@@ -16,7 +16,29 @@ services:
     restart: unless-stopped
     environment:
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in Portainer}
+      DEEZER_ENABLED: ${DEEZER_ENABLED:-false}
+      DEEZER_ARL: ${DEEZER_ARL:-}
+      DEEZER_MASTER_DECRYPTION_KEY: ${DEEZER_MASTER_DECRYPTION_KEY:-}
       SPRING_APPLICATION_JSON: >-
-        {"lavalink":{"plugins":[{"dependency":"dev.lavalink.youtube:youtube-plugin:1.18.2","snapshot":false}],"server":{"sources":{"youtube":false,"http":true,"local":false}}},"plugins":{"youtube":{"enabled":true,"allowSearch":true}}}
+        {
+          "lavalink": {
+            "plugins": [
+              {"dependency":"dev.lavalink.youtube:youtube-plugin:1.18.2","snapshot":false},
+              {"dependency":"com.github.topi314.lavasrc:lavasrc-plugin:4.8.3","snapshot":false}
+            ],
+            "server":{"sources":{"youtube":false,"http":true,"local":false}}
+          },
+          "plugins": {
+            "youtube":{"enabled":true,"allowSearch":true},
+            "lavasrc": {
+              "sources":{"deezer":"$${DEEZER_ENABLED}"},
+              "deezer":{
+                "arl":"$${DEEZER_ARL}",
+                "masterDecryptionKey":"$${DEEZER_MASTER_DECRYPTION_KEY}",
+                "formats":["MP3_128"]
+              }
+            }
+          }
+        }
       SERVER_PORT: "2333"
       SERVER_ADDRESS: "0.0.0.0"
