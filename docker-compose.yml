@@ -8,6 +8,7 @@ services:
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?Set DISCORD_BOT_TOKEN in Portainer}
       LAVALINK_URI: http://lavalink:2333
       LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:?Set LAVALINK_PASSWORD in Portainer}
+      HENRIKDEV_API_KEY: "${HENRIKDEV_API_KEY:-}"
     depends_on:
       - lavalink
 
